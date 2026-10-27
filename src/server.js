@@ -39,7 +39,13 @@ async function startServer() {
 
 if (require.main === module) {
   startServer().catch(async (error) => {
-    console.error("Backend startup failed:", { code: error.code || "CONFIG_OR_DATABASE_ERROR" });
+   console.error("Backend startup failed:", {
+  name: error.name || "UnknownError",
+  code: error.code || "NO_ERROR_CODE",
+  message: String(error.message || "No error message")
+    .replace(/postgres(?:ql)?:\/\/[^\s"'`]+/gi, "[DATABASE_URL_REDACTED]")
+    .replace(/(password|secret|token|service_role_key)\s*[:=]\s*[^,\s]+/gi, "$1=[REDACTED]"),
+});
     try {
       await prisma.$disconnect();
       await pool.end();
