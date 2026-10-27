@@ -1,0 +1,700 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  PROGRAMME_MANAGER
+  REVIEWER
+  DATA_ENTRY_OFFICER
+  REPORT_VIEWER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum PlantingStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum GrowthStage {
+  NEWLY_PLANTED
+  SEEDLING_ESTABLISHMENT
+  EARLY_GROWTH
+  ESTABLISHED_GROWTH
+  MATURE
+}
+
+enum GrowthCondition {
+  HEALTHY
+  FAIR
+  POOR
+  PEST_AFFECTED
+  DISEASE_AFFECTED
+  DEAD
+}
+
+enum GrowthUpdateStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum TreeOrderStatus {
+  PENDING_PAYMENT
+  PAID
+  PROCESSING
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESSFUL
+  FAILED
+  REFUNDED
+}
+
+enum LocationReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum OrderFulfilmentStatus {
+  NOT_SCHEDULED
+  SCHEDULED
+  PLANTED
+  VERIFICATION_PENDING
+}
+
+enum PlantingVerificationStatus {
+  NOT_STARTED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum EventStatus {
+  DRAFT
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum TargetPeriod {
+  WEEKLY
+  MONTHLY
+  YEARLY
+  PROGRAMME
+}
+
+enum TargetStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum SubmissionStatus {
+  NEW
+  IN_PROGRESS
+  RESOLVED
+  ARCHIVED
+}
+
+enum VolunteerStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CONTACTED
+  INACTIVE
+}
+
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+  APPROVAL
+  SYSTEM
+}
+
+enum ReportFormat {
+  CSV
+  XLSX
+  PDF
+}
+
+enum ReportStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum MediaType {
+  PHOTO
+  DOCUMENT
+  VIDEO
+}
+
+model User {
+  id               String     @id @default(cuid())
+  fullName         String
+  email            String     @unique
+  passwordHash     String
+  phone            String?
+  role             UserRole   @default(ADMIN)
+  status           UserStatus @default(ACTIVE)
+  profileImageUrl  String?
+  emailVerifiedAt  DateTime?
+  lastLoginAt      DateTime?
+  passwordChangedAt DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  createdPlantings  PlantingRecord[] @relation("PlantingCreator")
+  reviewedPlantings PlantingRecord[] @relation("PlantingReviewer")
+  verifiedPlantings PlantingRecord[] @relation("PlantingVerifier")
+  submittedGrowthUpdates GrowthUpdate[] @relation("GrowthUpdateSubmitter")
+  reviewedGrowthUpdates GrowthUpdate[] @relation("GrowthUpdateReviewer")
+
+  createdEvents     PlantingEvent[] @relation("EventCreator")
+  reviewedEvents    PlantingEvent[] @relation("EventReviewer")
+
+  createdLocations  PlantingLocation[] @relation("LocationCreator")
+  createdSpecies    TreeSpecies[] @relation("SpeciesCreator")
+  createdTargets    Target[] @relation("TargetCreator")
+  createdMedia      MediaAsset[] @relation("MediaUploader")
+
+  auditLogs          AuditLog[]
+  notifications      Notification[]
+  sessions           UserSession[]
+  passwordResetTokens PasswordResetToken[]
+  generatedReports   ReportExport[]
+  assignedMessages   ContactMessage[] @relation("MessageAssignee")
+  assignedVolunteers VolunteerApplication[] @relation("VolunteerAssignee")
+  reviewedVolunteers VolunteerApplication[] @relation("VolunteerReviewer")
+  contentUpdates     ContentPage[] @relation("ContentEditor")
+
+  @@index([role, status])
+  @@index([createdAt])
+}
+
+model UserSession {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model PlantingLocation {
+  id              String   @id @default(cuid())
+  name            String
+  slug            String   @unique
+  description     String?
+  address         String?
+  community       String?
+  localGovernment String?
+  state           String?  @default("Kwara")
+  country         String   @default("Nigeria")
+  latitude        Decimal? @db.Decimal(10, 7)
+  longitude       Decimal? @db.Decimal(10, 7)
+  imageUrl        String?
+  isPublic        Boolean  @default(true)
+  createdById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  createdBy       User?            @relation("LocationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  plantingRecords PlantingRecord[]
+  growthUpdates   GrowthUpdate[]
+  events          PlantingEvent[]
+  targets         Target[]
+
+  @@index([isPublic])
+  @@index([state, country])
+  @@index([localGovernment])
+}
+
+model TreeSpecies {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  scientificName String?
+  description    String?
+  imageUrl       String?
+  priceKobo      Int?
+  isNative       Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  isPublished    Boolean  @default(false)
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  createdBy       User?            @relation("SpeciesCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  plantingRecords PlantingRecord[]
+  targets         Target[]
+  orderItems      TreeOrderItem[]
+  donations       TreeDonation[]
+
+  @@index([isActive])
+  @@index([isPublished, isActive, name])
+}
+
+model PlantingEvent {
+  id           String      @id @default(cuid())
+  title        String
+  slug         String      @unique
+  description  String?
+  eventDate    DateTime
+  endDate      DateTime?
+  locationId   String?
+  status       EventStatus @default(DRAFT)
+  plannedTrees Int         @default(0)
+  notes        String?
+  photoUrls    String[]    @default([])
+  createdById  String
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNotes  String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  location        PlantingLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  createdBy       User              @relation("EventCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  reviewedBy      User?             @relation("EventReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  plantingRecords PlantingRecord[]
+
+  @@index([eventDate])
+  @@index([status, eventDate])
+  @@index([locationId])
+}
+
+model PlantingRecord {
+  id            String        @id @default(cuid())
+  referenceCode String  @unique @default(cuid())
+reviewNotes   String?
+  title         String?
+  description   String?
+  quantity      Int
+  plantingDate  DateTime
+  latitude      Decimal?      @db.Decimal(10, 7)
+  longitude     Decimal?      @db.Decimal(10, 7)
+  siteName      String?
+  locationNotes String?
+  photoUrls     String[]      @default([])
+  evidenceNotes String?
+  speciesId     String?
+  locationId    String?
+  eventId       String?
+  submittedById String
+  reviewedById  String?
+  reviewedAt    DateTime?
+  rejectionReason String?
+  verifiedById String?
+  verifiedAt   DateTime?
+  verificationNotes String?
+  isTestData   Boolean       @default(false)
+  treeOrderId  String?
+  treeDonationId String?
+  status        PlantingStatus @default(PENDING)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  species     TreeSpecies?       @relation(fields: [speciesId], references: [id], onDelete: SetNull)
+  location    PlantingLocation?  @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  event       PlantingEvent?     @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  submittedBy User               @relation("PlantingCreator", fields: [submittedById], references: [id], onDelete: Restrict)
+  reviewedBy  User?              @relation("PlantingReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  verifiedBy  User?              @relation("PlantingVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
+  treeOrder   TreeOrder?        @relation(fields: [treeOrderId], references: [id], onDelete: Restrict)
+  treeDonation TreeDonation?    @relation(fields: [treeDonationId], references: [id], onDelete: Restrict)
+  growthUpdates GrowthUpdate[]
+
+  @@index([status, plantingDate])
+  @@index([submittedById, createdAt])
+  @@index([locationId])
+  @@index([speciesId])
+  @@index([eventId])
+  @@index([status, isTestData, verifiedAt, plantingDate])
+  @@index([locationId, status])
+@@index([plantingDate])
+@@index([reviewedById, reviewedAt])
+@@index([speciesId, status])
+@@index([treeOrderId])
+@@index([treeDonationId])
+}
+
+model GrowthUpdate {
+id                String            @id @default(cuid())
+plantingRecordId  String?
+locationId        String?
+observationDate   DateTime
+growthStage       GrowthStage
+condition         GrowthCondition
+treesInspected    Int
+treesSurviving    Int?
+treesDead         Int?
+averageHeightCm   Decimal?          @db.Decimal(8, 2)
+notes             String?
+photoUrls         String[]          @default([])
+latitude          Decimal?          @db.Decimal(10, 7)
+longitude         Decimal?          @db.Decimal(10, 7)
+submittedById     String
+status            GrowthUpdateStatus @default(PENDING)
+isPublic          Boolean           @default(false)
+reviewedById      String?
+reviewedAt        DateTime?
+reviewNotes       String?
+rejectionReason   String?
+createdAt         DateTime          @default(now())
+updatedAt         DateTime          @updatedAt
+
+plantingRecord PlantingRecord? @relation(fields: [plantingRecordId], references: [id], onDelete: SetNull)
+location       PlantingLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+submittedBy    User @relation("GrowthUpdateSubmitter", fields: [submittedById], references: [id], onDelete: Restrict)
+reviewedBy     User? @relation("GrowthUpdateReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+@@index([plantingRecordId, observationDate])
+@@index([locationId, observationDate])
+@@index([status, isPublic, observationDate])
+@@index([submittedById, createdAt])
+}
+
+model TreeOrder {
+id                    String               @id @default(cuid())
+reference             String               @unique
+customerName          String
+customerEmail         String
+customerPhone         String
+requestedLocation     String
+locationDirections    String?
+status                TreeOrderStatus      @default(PENDING_PAYMENT)
+paymentStatus         PaymentStatus        @default(PENDING)
+locationReviewStatus  LocationReviewStatus @default(PENDING)
+fulfilmentStatus      OrderFulfilmentStatus @default(NOT_SCHEDULED)
+plantingVerificationStatus PlantingVerificationStatus @default(NOT_STARTED)
+totalAmountKobo       Int
+currency              String               @default("NGN")
+createdAt             DateTime             @default(now())
+updatedAt             DateTime             @updatedAt
+
+items               TreeOrderItem[]
+paymentTransactions PaymentTransaction[]
+plantingRecords     PlantingRecord[]
+
+@@index([status, createdAt])
+@@index([paymentStatus, createdAt])
+@@index([locationReviewStatus, createdAt])
+@@index([fulfilmentStatus, createdAt])
+@@index([plantingVerificationStatus, createdAt])
+}
+
+model TreeOrderItem {
+id             String   @id @default(cuid())
+orderId        String
+speciesId      String
+speciesName    String
+quantity       Int
+unitPriceKobo  Int
+lineTotalKobo  Int
+createdAt      DateTime @default(now())
+
+order   TreeOrder  @relation(fields: [orderId], references: [id], onDelete: Restrict)
+species TreeSpecies @relation(fields: [speciesId], references: [id], onDelete: Restrict)
+
+@@index([orderId])
+@@index([speciesId])
+}
+
+model TreeDonation {
+id             String        @id @default(cuid())
+reference      String        @unique
+donorName      String
+donorEmail     String
+donorPhone     String
+speciesId      String
+speciesName    String
+quantity       Int
+unitPriceKobo  Int
+totalAmountKobo Int
+currency       String        @default("NGN")
+paymentStatus  PaymentStatus @default(PENDING)
+plantingVerificationStatus PlantingVerificationStatus @default(NOT_STARTED)
+createdAt      DateTime      @default(now())
+updatedAt      DateTime      @updatedAt
+
+species             TreeSpecies          @relation(fields: [speciesId], references: [id], onDelete: Restrict)
+paymentTransactions PaymentTransaction[]
+plantingRecords     PlantingRecord[]
+
+@@index([paymentStatus, createdAt])
+@@index([plantingVerificationStatus, createdAt])
+@@index([speciesId, createdAt])
+}
+
+model PaymentTransaction {
+id                    String        @id @default(cuid())
+orderId               String?
+donationId            String?
+reference             String        @unique
+paystackTransactionId BigInt?       @unique
+amountKobo            Int
+currency              String        @default("NGN")
+status                PaymentStatus @default(PENDING)
+verifiedAt            DateTime?
+webhookProcessedAt    DateTime?
+appliedAt             DateTime?
+createdAt              DateTime      @default(now())
+updatedAt             DateTime      @updatedAt
+
+order    TreeOrder?    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+donation TreeDonation? @relation(fields: [donationId], references: [id], onDelete: Restrict)
+
+@@index([orderId, status, createdAt])
+@@index([donationId, status, createdAt])
+@@index([status, createdAt])
+}
+
+model Target {
+  id             String       @id @default(cuid())
+  name           String
+  description    String?
+  period         TargetPeriod
+  targetQuantity Int
+  startDate      DateTime
+  endDate        DateTime
+  status         TargetStatus @default(ACTIVE)
+
+  locationId     String?
+  speciesId      String?
+  createdById    String?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  location PlantingLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  species  TreeSpecies?      @relation(fields: [speciesId], references: [id], onDelete: SetNull)
+  createdBy User?            @relation("TargetCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([period, status])
+  @@index([startDate, endDate])
+  @@index([locationId])
+  @@index([speciesId])
+}
+
+model MediaAsset {
+  id           String    @id @default(cuid())
+  name         String
+  fileUrl      String
+  storagePath  String?
+  mimeType     String?
+  sizeBytes    BigInt?
+  mediaType    MediaType @default(PHOTO)
+  altText      String?
+  caption      String?
+  isPublic     Boolean   @default(false)
+  uploadedById String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  uploadedBy User? @relation("MediaUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([mediaType, createdAt])
+  @@index([isPublic])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorId     String?
+  action      String
+  entityType  String
+  entityId    String?
+  description String?
+  ipAddress   String?
+  userAgent   String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+  @@index([action, createdAt])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      NotificationType @default(INFO)
+  link      String?
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+}
+
+model ReportExport {
+  id            String       @id @default(cuid())
+  name          String
+  format        ReportFormat
+  status        ReportStatus @default(QUEUED)
+  filters       Json?
+  fileUrl       String?
+  errorMessage  String?
+  requestedById String
+  completedAt   DateTime?
+  expiresAt     DateTime?
+  createdAt     DateTime     @default(now())
+
+  requestedBy User @relation(fields: [requestedById], references: [id], onDelete: Restrict)
+
+  @@index([requestedById, createdAt])
+  @@index([status, createdAt])
+}
+
+model ContactMessage {
+  id            String           @id @default(cuid())
+  name          String
+  email         String
+  phone         String?
+  subject       String?
+  message       String
+  status        SubmissionStatus @default(NEW)
+  internalNotes String?
+  assignedToId  String?
+  resolvedAt    DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  assignedTo User? @relation("MessageAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([assignedToId])
+}
+
+model VolunteerApplication {
+  id            String          @id @default(cuid())
+  fullName      String
+  email         String
+  phone         String?
+  organization  String?
+  location      String?
+  interests     String
+  availability  String?
+  experience    String?
+  message       String?
+  status        VolunteerStatus @default(PENDING)
+  internalNotes String?
+  assignedToId  String?
+  reviewedById  String?
+  reviewedAt    DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  assignedTo User? @relation("VolunteerAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  reviewedBy User? @relation("VolunteerReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([email])
+  @@index([assignedToId])
+}
+
+model NewsletterSubscriber {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  isSubscribed   Boolean  @default(true)
+  subscribedAt   DateTime @default(now())
+  unsubscribedAt DateTime?
+  createdAt      DateTime @default(now())
+
+  @@index([isSubscribed])
+}
+
+model ContentPage {
+  id             String        @id @default(cuid())
+  title          String
+  slug           String        @unique
+  summary        String?
+  body           Json
+  coverImageUrl  String?
+  status         ContentStatus @default(DRAFT)
+  seoTitle       String?
+  seoDescription String?
+  publishedAt    DateTime?
+  createdById    String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  createdBy User? @relation("ContentEditor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([status, publishedAt])
+}
+
+model SiteSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       Json
+  description String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+}
+
+model ImpactSnapshot {
+  id                String   @id @default(cuid())
+  snapshotDate      DateTime @unique
+  approvedTreeCount BigInt   @default(0)
+  targetTreeCount   BigInt   @default(5000000)
+  approvedRecords   Int      @default(0)
+  activeLocations   Int      @default(0)
+  speciesCount      Int      @default(0)
+  createdAt         DateTime @default(now())
+
+  @@index([snapshotDate])
+}
